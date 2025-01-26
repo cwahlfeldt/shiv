@@ -76,11 +76,13 @@ static void *try_find_sdl3_lib(void)
 static struct sdl_syms *try_get_sdl3_syms(void)
 {
   void *sdl3 = try_find_sdl3_lib();
+
   if (!sdl3)
     return NULL;
+
   struct sdl_syms *syms = calloc(1, sizeof(*syms));
+
   void *init_sym = cosmo_dlsym(sdl3, "SDL_Init");
-  printf("SDL_Init symbol: %p\n", init_sym);
 
   *syms = (struct sdl_syms){
       .lib = sdl3,
@@ -109,43 +111,7 @@ static struct sdl_syms *try_get_sdl3_syms(void)
       .SDL_RenderTexture = cosmo_dlsym(sdl3, "SDL_RenderTexture"),
       .SDL_UpdateWindowSurface = cosmo_dlsym(sdl3, "SDL_UpdateWindowSurface"),
   };
-  // Quick check to make sure they were all found
-  for (size_t i = 0; i < (sizeof(struct sdl_syms) / sizeof(void *)); ++i)
-  {
-    if (!((void **)syms)[i])
-    {
-      const char *name = NULL;
-      if (i == 0)
-        name = "SDL_Init";
-      else if (i == 1)
-        name = "SDL_Quit";
-      // ... add all other functions
-      else if (i == 15)
-        name = "SDL_SetRenderLogicalPresentation";
-      else if (i == 16)
-        name = "SDL_SetRenderDrawBlendMode";
-      else if (i == 17)
-        name = "SDL_SetRenderDrawColor";
-      else if (i == 18)
-        name = "SDL_SetTextureBlendMode";
-      else if (i == 19)
-        name = "SDL_SetRenderScale";
-      else if (i == 20)
-        name = "SDL_RenderClear";
-      else if (i == 21)
-        name = "SDL_PollEvent";
-      else if (i == 22)
-        name = "SDL_UpdateTexture";
-      else if (i == 23)
-        name = "SDL_RenderCopy";
-      else if (i == 24)
-        name = "SDL_UpdateWindowSurface";
-      printf("sdl_syms[%zu] is NULL (looking for %s), symbol at offset %zu of struct sdl_syms\n",
-             i, name ? name : "(unknown)", i * sizeof(void *));
-      free(syms);
-      return NULL;
-    }
-  }
+
   return syms;
 }
 
@@ -196,9 +162,11 @@ static struct color color_from_hsl(float hue, float saturation,
 
 #define WIDTH 1280
 #define HEIGHT 800
+
 int main(void)
 {
   struct sdl_syms *sym = try_get_sdl3_syms();
+
   if (!sym)
   {
     printf("Failed to get symbols, bailing out.\n");
@@ -216,6 +184,7 @@ int main(void)
       "cosmo-sdl-template © Valtteri Koskivuori 2023, press Q or click on "
       "window to exit",
       WIDTH, HEIGHT, flags);
+
   if (!window)
   {
     printf("Window couldn't be created, error: \"%s\"\n", sym->SDL_GetError());
@@ -223,21 +192,26 @@ int main(void)
   }
 
   SDL_Renderer *renderer = sym->SDL_CreateRenderer(window, NULL);
+
   if (!renderer)
   {
     printf("Renderer couldn't be created, error: \"%s\"\n",
            sym->SDL_GetError());
+
     return -1;
   }
+
   sym->SDL_SetRenderLogicalPresentation(renderer, WIDTH, HEIGHT, SDL_LOGICAL_PRESENTATION_LETTERBOX);
   sym->SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
   sym->SDL_SetRenderScale(renderer, 1.0f, 1.0f);
 
   float hue = 0.0f;
   bool running = true;
+
   while (running)
   {
     SDL_Event event = {0};
+
     while (sym->SDL_PollEvent(&event))
     {
       if (event.type == SDL_EVENT_KEY_DOWN && event.key.repeat == 0)
@@ -256,7 +230,9 @@ int main(void)
     hue += 0.5f;
     if (hue >= 360.0f)
       hue = 0.0f;
+
     struct color c = color_from_hsl(hue, 100, 50);
+
     sym->SDL_SetRenderDrawColor(renderer, c.r * 255, c.g * 255, c.b * 255, 128);
     sym->SDL_RenderClear(renderer);
     sym->SDL_RenderPresent(renderer);
@@ -267,6 +243,7 @@ int main(void)
   sym->SDL_DestroyRenderer(renderer);
   sym->SDL_DestroyWindow(window);
   sym->SDL_Quit();
+
   cosmo_dlclose(sym->lib);
   free(sym);
 
