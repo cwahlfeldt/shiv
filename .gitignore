@@ -1,4 +1,4 @@
 .cache
 obj
-./build
+build
 .vscode
