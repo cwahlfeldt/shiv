@@ -1,3 +1,6 @@
 [submodule "SDL"]
 	path = SDL
 	url = https://github.com/libsdl-org/SDL.git
+[submodule "umka-lang"]
+	path = umka-lang
+	url = https://github.com/vtereshkov/umka-lang.git
