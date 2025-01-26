@@ -1,11 +1,11 @@
 # Compiler configuration
 CC = /var/home/waffles/code/cosmocc/bin/cosmocc
-CFLAGS = -Wall -Wextra -std=c99 -O0 -fno-debug-types-section -I./SDL3/include
+CFLAGS = -Wall -Wextra -std=c99 -O0 -fno-debug-types-section -I./SDL/include
 LDFLAGS = -ldl
 
 # Project settings
 BIN = cosmo-sdl
-BINDIR = bin
+BINDIR = build
 OBJDIR = obj
 
 # Source files

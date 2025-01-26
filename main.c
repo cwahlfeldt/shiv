@@ -3,7 +3,7 @@
 #define _COSMO_SOURCE
 #include "libc/dlopen/dlfcn.h"
 
-#include "SDL3/SDL.h"
+#include "SDL/include/SDL3/SDL.h"
 
 // TODO: Add all SDL functions
 struct sdl_syms
@@ -16,46 +16,45 @@ struct sdl_syms
   bool (*SDL_SetWindowIcon)(SDL_Window *window, SDL_Surface *icon);
   void (*SDL_DestroySurface)(SDL_Surface *surface);
   SDL_Surface *(*SDL_CreateSurfaceFrom)(void *pixels, int width, int height,
-                                       int depth, int pitch, Uint32 format);
+                                        int depth, int pitch, Uint32 format);
   SDL_Window *(*SDL_CreateWindow)(const char *title, int w, int h, Uint32 flags);
   SDL_Renderer *(*SDL_CreateRenderer)(SDL_Window *window, const char *name);
   SDL_Texture *(*SDL_CreateTexture)(SDL_Renderer *renderer, Uint32 format,
-                                  int access, int w, int h);
+                                    int access, int w, int h);
   void (*SDL_DestroyTexture)(SDL_Texture *texture);
   void (*SDL_DestroyRenderer)(SDL_Renderer *renderer);
   void (*SDL_DestroyWindow)(SDL_Window *window);
   void (*SDL_RenderPresent)(SDL_Renderer *renderer);
   bool (*SDL_SetRenderLogicalPresentation)(SDL_Renderer *renderer, int w, int h, SDL_RendererLogicalPresentation mode);
   bool (*SDL_SetRenderDrawBlendMode)(SDL_Renderer *renderer,
-                                   SDL_BlendMode blend_mode);
+                                     SDL_BlendMode blend_mode);
   bool (*SDL_SetRenderDrawColor)(SDL_Renderer *renderer, Uint8 r, Uint8 g,
-                               Uint8 b, Uint8 a);
+                                 Uint8 b, Uint8 a);
   bool (*SDL_SetTextureBlendMode)(SDL_Texture *texture,
-                                SDL_BlendMode blend_mode);
+                                  SDL_BlendMode blend_mode);
   bool (*SDL_SetRenderScale)(SDL_Renderer *renderer, float scaleX, float scaleY);
   bool (*SDL_RenderClear)(SDL_Renderer *renderer);
   bool (*SDL_PollEvent)(SDL_Event *event);
   bool (*SDL_UpdateTexture)(SDL_Texture *texture, const SDL_Rect *rect,
-                          const void *pixels, int pitch);
+                            const void *pixels, int pitch);
   bool (*SDL_RenderTexture)(SDL_Renderer *renderer, SDL_Texture *texture,
-                          const SDL_FRect *srcrect, const SDL_FRect *dstrect);
+                            const SDL_FRect *srcrect, const SDL_FRect *dstrect);
   bool (*SDL_UpdateWindowSurface)(SDL_Window *window);
 };
 
 static void *try_find_sdl3_lib(void)
 {
   char *candidates[] = {
-    "/var/home/waffles/code/shiv/SDL3/build/libSDL3.so",
-    "/var/home/waffles/code/shiv/SDL3/build/libSDL3.so.0",
-    "./SDL3/build/libSDL3.so",
-    "./SDL3/build/libSDL3.so.0",
-    "libSDL3.so",
-    "libSDL3.so.0",
-    "libSDL3-0.so",
-    "libSDL3.dylib",
-    "SDL3.dll",
-    "SDL3"
-  };
+      "/var/home/waffles/code/shiv/SDL/build/libSDL3.so",
+      "/var/home/waffles/code/shiv/SDL/build/libSDL3.so.0",
+      "./SDL/build/libSDL3.so",
+      "./SDL/build/libSDL3.so.0",
+      "libSDL3.so",
+      "libSDL3.so.0",
+      "libSDL3-0.so",
+      "libSDL3.dylib",
+      "SDL3.dll",
+      "SDL3"};
   void *lib = NULL;
   for (size_t i = 0; i < (sizeof(candidates) / sizeof(*candidates)); ++i)
   {
@@ -96,7 +95,7 @@ static struct sdl_syms *try_get_sdl3_syms(void)
       .SDL_CreateRenderer = cosmo_dlsym(sdl3, "SDL_CreateRenderer"),
       .SDL_CreateTexture = cosmo_dlsym(sdl3, "SDL_CreateTexture"),
       .SDL_DestroyTexture = cosmo_dlsym(sdl3, "SDL_DestroyTexture"),
-      .SDL_DestroyRenderer = cosmo_dlsym(sdl3, "SDL_DestroyRenderer"), 
+      .SDL_DestroyRenderer = cosmo_dlsym(sdl3, "SDL_DestroyRenderer"),
       .SDL_DestroyWindow = cosmo_dlsym(sdl3, "SDL_DestroyWindow"),
       .SDL_RenderPresent = cosmo_dlsym(sdl3, "SDL_RenderPresent"),
       .SDL_SetRenderLogicalPresentation = cosmo_dlsym(sdl3, "SDL_SetRenderLogicalPresentation"),
@@ -113,24 +112,36 @@ static struct sdl_syms *try_get_sdl3_syms(void)
   // Quick check to make sure they were all found
   for (size_t i = 0; i < (sizeof(struct sdl_syms) / sizeof(void *)); ++i)
   {
-      if (!((void **)syms)[i])
-      {
-        const char* name = NULL;
-        if (i == 0) name = "SDL_Init";
-        else if (i == 1) name = "SDL_Quit";
-        // ... add all other functions
-        else if (i == 15) name = "SDL_SetRenderLogicalPresentation";
-        else if (i == 16) name = "SDL_SetRenderDrawBlendMode";
-        else if (i == 17) name = "SDL_SetRenderDrawColor";
-        else if (i == 18) name = "SDL_SetTextureBlendMode";
-        else if (i == 19) name = "SDL_SetRenderScale";
-        else if (i == 20) name = "SDL_RenderClear";
-        else if (i == 21) name = "SDL_PollEvent";
-        else if (i == 22) name = "SDL_UpdateTexture";
-        else if (i == 23) name = "SDL_RenderCopy";
-        else if (i == 24) name = "SDL_UpdateWindowSurface";
-        printf("sdl_syms[%zu] is NULL (looking for %s), symbol at offset %zu of struct sdl_syms\n", 
-               i, name ? name : "(unknown)", i * sizeof(void*));
+    if (!((void **)syms)[i])
+    {
+      const char *name = NULL;
+      if (i == 0)
+        name = "SDL_Init";
+      else if (i == 1)
+        name = "SDL_Quit";
+      // ... add all other functions
+      else if (i == 15)
+        name = "SDL_SetRenderLogicalPresentation";
+      else if (i == 16)
+        name = "SDL_SetRenderDrawBlendMode";
+      else if (i == 17)
+        name = "SDL_SetRenderDrawColor";
+      else if (i == 18)
+        name = "SDL_SetTextureBlendMode";
+      else if (i == 19)
+        name = "SDL_SetRenderScale";
+      else if (i == 20)
+        name = "SDL_RenderClear";
+      else if (i == 21)
+        name = "SDL_PollEvent";
+      else if (i == 22)
+        name = "SDL_UpdateTexture";
+      else if (i == 23)
+        name = "SDL_RenderCopy";
+      else if (i == 24)
+        name = "SDL_UpdateWindowSurface";
+      printf("sdl_syms[%zu] is NULL (looking for %s), symbol at offset %zu of struct sdl_syms\n",
+             i, name ? name : "(unknown)", i * sizeof(void *));
       free(syms);
       return NULL;
     }
