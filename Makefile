@@ -1,6 +1,6 @@
 # Compiler configuration
 CC = /var/home/waffles/code/cosmocc/bin/cosmocc
-CFLAGS = -Wall -Wextra -std=c99 -O0 -fno-debug-types-section
+CFLAGS = -Wall -Wextra -std=c99 -O0 -fno-debug-types-section -I./SDL3/include
 LDFLAGS = -ldl
 
 # Project settings
@@ -9,7 +9,7 @@ BINDIR = bin
 OBJDIR = obj
 
 # Source files
-SRCS = $(shell find . -name '*.c')
+SRCS = main.c
 OBJS = $(patsubst %.c, $(OBJDIR)/%.o, $(SRCS))
 
 # Default target
