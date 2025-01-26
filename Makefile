@@ -4,7 +4,7 @@ CFLAGS = -Wall -Wextra -std=c99 -O0 -fno-debug-types-section -I./SDL/include
 LDFLAGS = -ldl
 
 # Project settings
-BIN = cosmo-sdl
+BIN = shiv
 BINDIR = build
 OBJDIR = obj
 

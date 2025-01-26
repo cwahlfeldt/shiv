@@ -165,6 +165,7 @@ static struct color color_from_hsl(float hue, float saturation,
 
 int main(void)
 {
+  printf("\n\n\n\n\nlets go!\n\n\n\n\n");
   struct sdl_syms *sym = try_get_sdl3_syms();
 
   if (!sym)
@@ -181,7 +182,7 @@ int main(void)
 
   uint32_t flags = SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_RESIZABLE;
   SDL_Window *window = sym->SDL_CreateWindow(
-      "cosmo-sdl-template © Valtteri Koskivuori 2023, press Q or click on "
+      "shiv © Christopher C Wahlfeldt, press Q or click on "
       "window to exit",
       WIDTH, HEIGHT, flags);
 

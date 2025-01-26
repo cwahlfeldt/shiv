@@ -1,4 +1,3 @@
 .cache
 obj
-bin
-build
+./build
