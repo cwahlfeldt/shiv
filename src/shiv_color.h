@@ -3,6 +3,7 @@
 
 // Color conversion functions
 #include "shiv_sdl.h"
+
 static float hue_to_rgb(float p, float q, float t) {
   if (t < 0.0f)
     t += 1.0f;
@@ -17,8 +18,7 @@ static float hue_to_rgb(float p, float q, float t) {
   return p;
 }
 
-static struct color color_from_hsl(float hue, float saturation,
-                                   float lightness) {
+struct color color_from_hsl(float hue, float saturation, float lightness) {
   // Map these to HSL standard ranges. 0-360 for h, 0-100 for s and l
   hue = hue / 360.0f;
   saturation = saturation / 100.0f;

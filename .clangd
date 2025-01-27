@@ -1,0 +1,9 @@
+# .clangd
+Diagnostics:
+  Suppress:
+    - "invalid-target-triple"
+
+CompileFlags:
+  Add: [-Wno-invalid-target-triple]
+  # Optional: Override the target for clangd only
+  Compiler: clang
