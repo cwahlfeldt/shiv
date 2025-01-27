@@ -1,52 +1,110 @@
-#include <stdbool.h>
-
 #define _COSMO_SOURCE
 #include "libc/dlopen/dlfcn.h"
+#include <errno.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <spawn.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
-#include "../modules/SDL/include/SDL3/SDL.h"
+#include "shiv_color.h"
+#include "shiv_plugin.h"
+#include "shiv_sdl.h"
 
-#define CR_HOST
-#include "../modules/creload/cr.h"
+#define WIDTH 1280
+#define HEIGHT 800
 
-// TODO: Add all SDL functions
-struct sdl_syms {
-  void *lib;
-  int (*SDL_Init)(Uint32 flags);
-  void (*SDL_Quit)(void);
-  void (*SDL_Delay)(Uint32 ms);
-  const char *(*SDL_GetError)(void);
-  bool (*SDL_SetWindowIcon)(SDL_Window *window, SDL_Surface *icon);
-  void (*SDL_DestroySurface)(SDL_Surface *surface);
-  SDL_Surface *(*SDL_CreateSurfaceFrom)(void *pixels, int width, int height,
-                                        int depth, int pitch, Uint32 format);
-  SDL_Window *(*SDL_CreateWindow)(const char *title, int w, int h,
-                                  Uint32 flags);
-  SDL_Renderer *(*SDL_CreateRenderer)(SDL_Window *window, const char *name);
-  SDL_Texture *(*SDL_CreateTexture)(SDL_Renderer *renderer, Uint32 format,
-                                    int access, int w, int h);
-  void (*SDL_DestroyTexture)(SDL_Texture *texture);
-  void (*SDL_DestroyRenderer)(SDL_Renderer *renderer);
-  void (*SDL_DestroyWindow)(SDL_Window *window);
-  void (*SDL_RenderPresent)(SDL_Renderer *renderer);
-  bool (*SDL_SetRenderLogicalPresentation)(
-      SDL_Renderer *renderer, int w, int h,
-      SDL_RendererLogicalPresentation mode);
-  bool (*SDL_SetRenderDrawBlendMode)(SDL_Renderer *renderer,
-                                     SDL_BlendMode blend_mode);
-  bool (*SDL_SetRenderDrawColor)(SDL_Renderer *renderer, Uint8 r, Uint8 g,
-                                 Uint8 b, Uint8 a);
-  bool (*SDL_SetTextureBlendMode)(SDL_Texture *texture,
-                                  SDL_BlendMode blend_mode);
-  bool (*SDL_SetRenderScale)(SDL_Renderer *renderer, float scaleX,
-                             float scaleY);
-  bool (*SDL_RenderClear)(SDL_Renderer *renderer);
-  bool (*SDL_PollEvent)(SDL_Event *event);
-  bool (*SDL_UpdateTexture)(SDL_Texture *texture, const SDL_Rect *rect,
-                            const void *pixels, int pitch);
-  bool (*SDL_RenderTexture)(SDL_Renderer *renderer, SDL_Texture *texture,
-                            const SDL_FRect *srcrect, const SDL_FRect *dstrect);
-  bool (*SDL_UpdateWindowSurface)(SDL_Window *window);
+struct plugin_host {
+  pid_t pid;
+  int to_plugin[2];   // Pipe to send data to plugin
+  int from_plugin[2]; // Pipe to receive data from plugin
+  time_t last_modified;
 };
+
+static time_t get_file_mtime(const char *path) {
+  struct stat st;
+  if (stat(path, &st) == 0) {
+    return st.st_mtime;
+  }
+  return 0;
+}
+
+static void cleanup_plugin(struct plugin_host *plugin) {
+  if (plugin->pid > 0) {
+    kill(plugin->pid, SIGTERM);
+    waitpid(plugin->pid, NULL, 0);
+    plugin->pid = 0;
+  }
+
+  close(plugin->to_plugin[0]);
+  close(plugin->to_plugin[1]);
+  close(plugin->from_plugin[0]);
+  close(plugin->from_plugin[1]);
+}
+
+static bool launch_plugin(struct plugin_host *plugin, const char *plugin_path) {
+  // Create pipes
+  if (pipe(plugin->to_plugin) == -1 || pipe(plugin->from_plugin) == -1) {
+    perror("Failed to create pipes");
+    return false;
+  }
+
+  // Convert FDs to strings for args
+  char read_fd[16], write_fd[16];
+  snprintf(read_fd, sizeof(read_fd), "%d", plugin->to_plugin[0]);
+  snprintf(write_fd, sizeof(write_fd), "%d", plugin->from_plugin[1]);
+
+  // Prepare args
+  char *const args[] = {(char *)plugin_path, read_fd, write_fd, NULL};
+
+  // Launch plugin
+  int status = posix_spawn(&plugin->pid, plugin_path, NULL, NULL, args, NULL);
+  if (status != 0) {
+    perror("Failed to spawn plugin");
+    return false;
+  }
+
+  // Close unused ends of pipes
+  close(plugin->to_plugin[0]);
+  close(plugin->from_plugin[1]);
+
+  // Set remaining pipe ends to non-blocking
+  int flags;
+  flags = fcntl(plugin->to_plugin[1], F_GETFL, 0);
+  fcntl(plugin->to_plugin[1], F_SETFL, flags | O_NONBLOCK);
+  flags = fcntl(plugin->from_plugin[0], F_GETFL, 0);
+  fcntl(plugin->from_plugin[0], F_SETFL, flags | O_NONBLOCK);
+
+  // Store initial modification time
+  plugin->last_modified = get_file_mtime(plugin_path);
+  return true;
+}
+
+static bool check_and_reload_plugin(struct plugin_host *plugin,
+                                    const char *plugin_path) {
+  time_t current_mtime = get_file_mtime(plugin_path);
+  if (current_mtime <= plugin->last_modified) {
+    return false;
+  }
+
+  printf("Hot reloading plugin...\n");
+  cleanup_plugin(plugin);
+
+  // Small delay to ensure file is fully written
+  usleep(100000);
+
+  if (!launch_plugin(plugin, plugin_path)) {
+    printf("Failed to reload plugin\n");
+    return false;
+  }
+
+  printf("Plugin reloaded successfully!\n");
+  return true;
+}
 
 static void *try_find_sdl3_lib(void) {
   char *candidates[] = {"modules/SDL/build/libSDL3.so",
@@ -112,52 +170,11 @@ static struct sdl_syms *try_get_sdl3_syms(void) {
       .SDL_UpdateTexture = cosmo_dlsym(sdl3, "SDL_UpdateTexture"),
       .SDL_RenderTexture = cosmo_dlsym(sdl3, "SDL_RenderTexture"),
       .SDL_UpdateWindowSurface = cosmo_dlsym(sdl3, "SDL_UpdateWindowSurface"),
+      .SDL_GetTicks = cosmo_dlsym(sdl3, "SDL_GetTicks"),
   };
 
   return syms;
 }
-
-struct color {
-  float r, g, b, a;
-};
-
-// It's not obvious to me what p, q and t are supposed to be short for, copied
-// here verbatim.
-static float hue_to_rgb(float p, float q, float t) {
-  if (t < 0.0f)
-    t += 1.0f;
-  if (t > 1.0f)
-    t -= 1.0f;
-  if (t < 1.0f / 6.0f)
-    return p + (q - p) * 6.0f * t;
-  if (t < 1.0f / 2.0f)
-    return q;
-  if (t < 2.0f / 3.0f)
-    return p + (q - p) * (2.0f / 3.0f - t) * 6.0f;
-  return p;
-}
-
-static struct color color_from_hsl(float hue, float saturation,
-                                   float lightness) {
-  // Map these to HSL standard ranges. 0-360 for h, 0-100 for s and l
-  hue = hue / 360.0f;
-  saturation = saturation / 100.0f;
-  lightness = lightness / 100.0f;
-  if (saturation == 0.0f) {
-    return (struct color){lightness, lightness, lightness, 1.0f};
-  } else {
-    const float q = lightness < 0.5f
-                        ? lightness * (1.0f + saturation)
-                        : lightness + saturation - lightness * saturation;
-    const float p = 2.0f * lightness - q;
-    return (struct color){hue_to_rgb(p, q, hue + 1.0f / 3.0f),
-                          hue_to_rgb(p, q, hue),
-                          hue_to_rgb(p, q, hue - 1.0f / 3.0f), 1.0f};
-  }
-}
-
-#define WIDTH 1280
-#define HEIGHT 800
 
 int main(void) {
   printf("\n\n\n\n\nlets go!\n\n\n\n\n");
@@ -173,10 +190,10 @@ int main(void) {
     return -1;
   }
 
+  // Create window and renderer
   uint32_t flags = SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_RESIZABLE;
   SDL_Window *window = sym->SDL_CreateWindow(
-      "shiv © Christopher C Wahlfeldt, press Q or click on "
-      "window to exit",
+      "shiv © Christopher C Wahlfeldt, press Q or click on window to exit",
       WIDTH, HEIGHT, flags);
 
   if (!window) {
@@ -185,11 +202,10 @@ int main(void) {
   }
 
   SDL_Renderer *renderer = sym->SDL_CreateRenderer(window, NULL);
-
   if (!renderer) {
     printf("Renderer couldn't be created, error: \"%s\"\n",
            sym->SDL_GetError());
-
+    sym->SDL_DestroyWindow(window);
     return -1;
   }
 
@@ -198,41 +214,90 @@ int main(void) {
   sym->SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
   sym->SDL_SetRenderScale(renderer, 1.0f, 1.0f);
 
-  float hue = 0.0f;
-  bool running = true;
+  // Initialize plugin system
+  struct plugin_host plugin = {0};
+  if (!launch_plugin(&plugin, "build/plugin")) {
+    printf("Failed to launch plugin\n");
+    sym->SDL_DestroyRenderer(renderer);
+    sym->SDL_DestroyWindow(window);
+    sym->SDL_Quit();
+    return -1;
+  }
 
-  while (running) {
+  struct plugin_message msg = {.type = MSG_UPDATE,
+                               .data.state = {.hue = 0.0f, .running = true}};
+
+  // Main game loop
+  while (msg.data.state.running) {
     SDL_Event event = {0};
-
     while (sym->SDL_PollEvent(&event)) {
       if (event.type == SDL_EVENT_KEY_DOWN && event.key.repeat == 0) {
         if (event.key.scancode == SDL_SCANCODE_Q) {
-          running = false;
+          msg.data.state.running = false;
         }
       }
       if (event.type == SDL_EVENT_QUIT) {
-        running = false;
+        msg.data.state.running = false;
       }
     }
 
-    hue += 0.5f;
-    if (hue >= 360.0f)
-      hue = 0.0f;
+    // Check for plugin changes
+    check_and_reload_plugin(&plugin, "build/plugin");
 
-    struct color c = color_from_hsl(hue, 100, 50);
+    static uint32_t last_update = 0;
+    uint32_t current_time = sym->SDL_GetTicks();
 
-    sym->SDL_SetRenderDrawColor(renderer, c.r * 255, c.g * 255, c.b * 255, 128);
-    sym->SDL_RenderClear(renderer);
-    sym->SDL_RenderPresent(renderer);
-    sym->SDL_UpdateWindowSurface(window);
+    // Send update message every 16ms (roughly 60fps)
+    if (current_time - last_update >= 16) {
+      msg.type = MSG_UPDATE; // Ensure we're sending update message
+
+      if (write(plugin.to_plugin[1], &msg, sizeof(msg)) < 0 &&
+          errno != EAGAIN) {
+        printf("Failed to write to plugin: %d\n", errno);
+        break;
+      }
+      printf("Main: sent update message\n");
+      last_update = current_time;
+    }
+
+    // Handle plugin messages
+    int bytes;
+    while ((bytes = read(plugin.from_plugin[0], &msg, sizeof(msg))) > 0 ||
+           (bytes < 0 && errno == EAGAIN)) {
+      if (bytes < 0)
+        continue; // Skip EAGAIN case
+
+      printf("Main: received message type: %d\n", msg.type);
+      switch (msg.type) {
+      case MSG_STATE:
+        printf("Main: state update - hue: %f\n", msg.data.state.hue);
+        break;
+
+      case MSG_RENDER: {
+        // Handle render command - use color directly from message
+        printf("Main: rendering color r=%f g=%f b=%f\n", msg.data.color.r,
+               msg.data.color.g, msg.data.color.b);
+        sym->SDL_SetRenderDrawColor(renderer, (uint8_t)(msg.data.color.r * 255),
+                                    (uint8_t)(msg.data.color.g * 255),
+                                    (uint8_t)(msg.data.color.b * 255), 128);
+        sym->SDL_RenderClear(renderer);
+        sym->SDL_RenderPresent(renderer);
+        break;
+      }
+      }
+    }
+
+    // Short sleep to prevent busy-waiting
+    usleep(1000);
+
     sym->SDL_Delay(16);
   }
 
+  // Cleanup
+  cleanup_plugin(&plugin);
   sym->SDL_DestroyRenderer(renderer);
   sym->SDL_DestroyWindow(window);
   sym->SDL_Quit();
-
-  cosmo_dlclose(sym->lib);
   free(sym);
 
   return 0;

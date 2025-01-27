@@ -1,7 +1,13 @@
-#ifndef GAME_SHARED_H
-#define GAME_SHARED_H
+#ifndef SHIV_SDL_H
+#define SHIV_SDL_H
 
-#include "../modules/SDL/include/SDL3/SDL.h"
+#include "SDL3/SDL.h"
+#include "SDL3/SDL_stdinc.h"
+
+// Color structure for HSL conversion
+struct color {
+  float r, g, b, a;
+};
 
 // Shared structure to pass SDL symbols
 struct sdl_syms {
@@ -41,6 +47,7 @@ struct sdl_syms {
   bool (*SDL_RenderTexture)(SDL_Renderer *renderer, SDL_Texture *texture,
                             const SDL_FRect *srcrect, const SDL_FRect *dstrect);
   bool (*SDL_UpdateWindowSurface)(SDL_Window *window);
+  Uint64 (*SDL_GetTicks)(void);
 };
 
 // Game context passed between host and plugin
