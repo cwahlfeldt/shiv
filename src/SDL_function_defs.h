@@ -1,5 +1,5 @@
-#ifndef SDL_FUNCTIONS_H
-#define SDL_FUNCTIONS_H
+#ifndef SDL_FUNCTION_DEFS_H
+#define SDL_FUNCTION_DEFS_H
 
 #define SDL_FUNCTION_DEFS                                                                                                          \
   X(int, SDL_Init, (Uint32 flags))                                                                                                 \

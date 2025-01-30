@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#define _COSMO_SOURCE
+
 #include "SDL_functions.h"
 
 #define WIDTH 1280
@@ -29,28 +31,28 @@ int main(void) {
     return -1;
   }
 
-    ctx.renderer = ctx.sym->SDL_CreateRenderer(ctx.window, NULL);
-    if (!ctx.renderer) {
-      printf("Renderer couldn't be created: %s\n", ctx.sym->SDL_GetError());
-      ctx.sym->SDL_DestroyWindow(ctx.window);
-      return -1;
-    }
+  ctx.renderer = ctx.sym->SDL_CreateRenderer(ctx.window, NULL);
+  if (!ctx.renderer) {
+    printf("Renderer couldn't be created: %s\n", ctx.sym->SDL_GetError());
+    ctx.sym->SDL_DestroyWindow(ctx.window);
+    return -1;
+  }
 
-    // Initialize rendering settings
-    ctx.sym->SDL_SetRenderLogicalPresentation(ctx.renderer, WIDTH, HEIGHT, SDL_LOGICAL_PRESENTATION_LETTERBOX);
-    ctx.sym->SDL_SetRenderDrawBlendMode(ctx.renderer, SDL_BLENDMODE_BLEND);
-    ctx.sym->SDL_SetRenderScale(ctx.renderer, 1.0f, 1.0f);
+  // Initialize rendering settings
+  ctx.sym->SDL_SetRenderLogicalPresentation(ctx.renderer, WIDTH, HEIGHT, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+  ctx.sym->SDL_SetRenderDrawBlendMode(ctx.renderer, SDL_BLENDMODE_BLEND);
+  ctx.sym->SDL_SetRenderScale(ctx.renderer, 1.0f, 1.0f);
 
-    ctx.hue = 0.0f;
-    ctx.running = true;
+  ctx.hue = 0.0f;
+  ctx.running = true;
 
-    // Main game loop
-    while (ctx.running) {
-      handle_events(&ctx);
-      update_and_render(&ctx);
-      ctx.sym->SDL_Delay(16);  // ~60 FPS
-    }
+  // Main game loop
+  while (ctx.running) {
+    handle_events(&ctx);
+    update_and_render(&ctx);
+    ctx.sym->SDL_Delay(16);  // ~60 FPS
+  }
 
-    cleanup_sdl(&ctx);
-    return 0;
+  cleanup_sdl(&ctx);
+  return 0;
 }

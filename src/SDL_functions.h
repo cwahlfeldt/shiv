@@ -1,9 +1,8 @@
-#ifndef SHIV_SDL_H
-#define SHIV_SDL_H
-
-#include <SDL3/SDL_stdinc.h>
+#ifndef SDL_FUNCTIONS_H
+#define SDL_FUNCTIONS_H
 
 #include "SDL3/SDL.h"
+#include "SDL3/SDL_stdinc.h"
 #include "SDL_function_defs.h"
 
 struct sdl_syms {
