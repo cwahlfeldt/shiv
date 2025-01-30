@@ -9,7 +9,7 @@ BINDIR = build
 OBJDIR = obj
 
 # Source files
-SRCS = src/main.c src/shiv_sdl.c
+SRCS = src/main.c src/SDL_functions.c
 OBJS = $(patsubst %.c, $(OBJDIR)/%.o, $(SRCS))
 
 # Default target
