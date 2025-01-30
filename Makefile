@@ -1,6 +1,6 @@
 # Compiler configuration
 CC = /var/home/waffles/code/cosmocc/bin/cosmocc
-CFLAGS = -Wall -Wextra -std=c99 -O0 -fno-debug-types-section -I./modules/SDL/include
+CFLAGS = -Wall -Wextra -std=c99 -O0 -Wno-implicit-function-declaration -fno-debug-types-section -I./lib/SDL/include
 LDFLAGS = -ldl
 
 # Project settings
@@ -9,7 +9,7 @@ BINDIR = build
 OBJDIR = obj
 
 # Source files
-SRCS = src/main.c
+SRCS = src/main.c src/shiv_sdl.c
 OBJS = $(patsubst %.c, $(OBJDIR)/%.o, $(SRCS))
 
 # Default target

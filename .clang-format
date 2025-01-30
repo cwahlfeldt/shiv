@@ -1,0 +1,11 @@
+
+BasedOnStyle: Google
+ColumnLimit: 1000
+BinPackParameters: false
+BinPackArguments: false
+AlignAfterOpenBracket: DontAlign
+AlignConsecutiveDeclarations: false
+AlignConsecutiveAssignments: false
+AlignConsecutiveMacros: false
+AllowAllParametersOfDeclarationOnNextLine: false
+AlignTrailingComments: false
