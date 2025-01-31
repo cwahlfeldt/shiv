@@ -4,6 +4,6 @@
 [submodule "lib/flecs"]
 	path = lib/flecs
 	url = https://github.com/SanderMertens/flecs.git
-[submodule "lib/umka-lang"]
-	path = lib/umka-lang
-	url = https://github.com/vtereshkov/umka-lang.git
+[submodule "lib/janet"]
+	path = lib/janet
+	url = https://github.com/janet-lang/janet.git

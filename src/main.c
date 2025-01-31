@@ -3,7 +3,7 @@
 
 #define _COSMO_SOURCE
 
-#include "SDL_functions.h"
+#include "core/SDLFunctions.h"
 
 #define WIDTH 1280
 #define HEIGHT 800

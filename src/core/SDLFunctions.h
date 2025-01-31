@@ -2,8 +2,7 @@
 #define SDL_FUNCTIONS_H
 
 #include "SDL3/SDL.h"
-#include "SDL3/SDL_stdinc.h"
-#include "SDL_function_defs.h"
+#include "SDLFunctionDefs.h"
 
 struct sdl_syms {
   void* lib;

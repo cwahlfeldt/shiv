@@ -1,5 +1,5 @@
 #define _COSMO_SOURCE
-#include "SDL_functions.h"
+#include "SDLFunctions.h"
 
 #include <stdio.h>
 #include <stdlib.h>
