@@ -1,9 +1,0 @@
-[submodule "lib/SDL"]
-	path = lib/SDL
-	url = https://github.com/libsdl-org/SDL.git
-[submodule "lib/flecs"]
-	path = lib/flecs
-	url = https://github.com/SanderMertens/flecs.git
-[submodule "lib/janet"]
-	path = lib/janet
-	url = https://github.com/janet-lang/janet.git
