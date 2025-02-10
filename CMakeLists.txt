@@ -1,28 +1,45 @@
-cmake_minimum_required(VERSION 3.15)
-project(shiv)
+cmake_minimum_required(VERSION 3.10)
+project(shiv LANGUAGES C)
 
-# Use pkg-config to find SDL3
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(SDL3 REQUIRED sdl3)
+find_library(FLECS_LIB
+    NAMES flecs libflecs
+    PATHS ${CMAKE_CURRENT_SOURCE_DIR}/lib/flecs/build
+)
+
+find_library(SDL_LIB
+    NAMES SDL3 libSDL3
+    PATHS ${CMAKE_CURRENT_SOURCE_DIR}/lib/SDL/build
+)
+
+find_library(CGLM_LIB
+    NAMES cglm libcglm
+    PATHS ${CMAKE_CURRENT_SOURCE_DIR}/lib/cglm/build
+)
 
 # Include directories
 include_directories(
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/renderer
     ${LIB_DIR}/SDL/include
     ${LIB_DIR}/cglm/include
     ${LIB_DIR}/stb
-    ${SDL3_INCLUDE_DIRS}
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
 add_executable(shiv
     src/main.c
     src/renderer/renderer.c
-    examples/depth_sampler.c
+    src/systems/depth_sampler.c
 )
 
 target_link_libraries(shiv
-    ${SDL3_LIBRARIES}
-    m    # math library
+    ${SDL_LIB}
+    ${CGLM_LIB}
+    ${FLECS_LIB}
+    m
+)
+
+target_include_directories(shiv
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/lib/flecs/include
 )
 
 add_custom_command(TARGET shiv POST_BUILD

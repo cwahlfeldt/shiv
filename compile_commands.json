@@ -1,0 +1,53 @@
+[
+  {
+    "arguments": [
+      "/usr/bin/cc",
+      "-I/SDL/include",
+      "-I/cglm/include",
+      "-I/stb",
+      "-I/var/home/waffles/code/shiv/include",
+      "-I/var/home/waffles/code/shiv/lib/flecs/include",
+      "-c",
+      "-o",
+      "CMakeFiles/shiv.dir/src/main.c.o",
+      "/var/home/waffles/code/shiv/src/main.c"
+    ],
+    "directory": "/var/home/waffles/code/shiv/build",
+    "file": "/var/home/waffles/code/shiv/src/main.c",
+    "output": "/var/home/waffles/code/shiv/build/CMakeFiles/shiv.dir/src/main.c.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/cc",
+      "-I/SDL/include",
+      "-I/cglm/include",
+      "-I/stb",
+      "-I/var/home/waffles/code/shiv/include",
+      "-I/var/home/waffles/code/shiv/lib/flecs/include",
+      "-c",
+      "-o",
+      "CMakeFiles/shiv.dir/src/renderer/renderer.c.o",
+      "/var/home/waffles/code/shiv/src/renderer/renderer.c"
+    ],
+    "directory": "/var/home/waffles/code/shiv/build",
+    "file": "/var/home/waffles/code/shiv/src/renderer/renderer.c",
+    "output": "/var/home/waffles/code/shiv/build/CMakeFiles/shiv.dir/src/renderer/renderer.c.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/cc",
+      "-I/SDL/include",
+      "-I/cglm/include",
+      "-I/stb",
+      "-I/var/home/waffles/code/shiv/include",
+      "-I/var/home/waffles/code/shiv/lib/flecs/include",
+      "-c",
+      "-o",
+      "CMakeFiles/shiv.dir/src/systems/depth_sampler.c.o",
+      "/var/home/waffles/code/shiv/src/systems/depth_sampler.c"
+    ],
+    "directory": "/var/home/waffles/code/shiv/build",
+    "file": "/var/home/waffles/code/shiv/src/systems/depth_sampler.c",
+    "output": "/var/home/waffles/code/shiv/build/CMakeFiles/shiv.dir/src/systems/depth_sampler.c.o"
+  }
+]
