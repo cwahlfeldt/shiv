@@ -49,57 +49,22 @@ SDL_GPUComputePipeline* create_compute_pipeline_from_shader(
     const char* shader_filename,
     SDL_GPUComputePipelineCreateInfo* create_info);
 
-// Vertex Formats
-typedef struct PositionVertex {
-    float x, y, z;
+#include <cglm/cglm.h>
+
+// Vertex Formats with aligned data for GPU use
+typedef struct {
+    float position[3];  // Using array form for compatibility
 } PositionVertex;
 
-typedef struct PositionColorVertex {
-    float x, y, z;
-    Uint8 r, g, b, a;
+typedef struct {
+    float position[3];  // Using array form for compatibility
+    uint8_t r, g, b, a;
 } PositionColorVertex;
 
-typedef struct PositionTextureVertex {
-    float x, y, z;
-    float u, v;
+typedef struct {
+    float position[3];  // Using array form for compatibility
+    float texcoord[2];  // Using array form for compatibility
 } PositionTextureVertex;
 
-// Matrix Math
-typedef struct Matrix4x4 {
-    float m11, m12, m13, m14;
-    float m21, m22, m23, m24;
-    float m31, m32, m33, m34;
-    float m41, m42, m43, m44;
-} Matrix4x4;
-
-typedef struct Vector3 {
-    float x, y, z;
-} Vector3;
-
-Matrix4x4 Matrix4x4_multiply(
-    Matrix4x4 matrix1,
-    Matrix4x4 matrix2);
-Matrix4x4 Matrix4x4_create_rotation_z(float radians);
-Matrix4x4
-Matrix4x4_create_translation(float x, float y, float z);
-Matrix4x4 Matrix4x4_create_orthographic_off_center(
-    float left,
-    float right,
-    float bottom,
-    float top,
-    float z_near_plane,
-    float z_far_plane);
-Matrix4x4 Matrix4x4_create_perspective_field_of_view(
-    float field_of_view,
-    float aspect_ratio,
-    float near_plane_distance,
-    float far_plane_distance);
-Matrix4x4 Matrix4x4_create_look_at(
-    Vector3 camera_position,
-    Vector3 camera_target,
-    Vector3 camera_up_vector);
-Vector3 Vector3_normalize(Vector3 vec);
-float Vector3_dot(Vector3 vec_a, Vector3 vec_b);
-Vector3 Vector3_cross(Vector3 vec_a, Vector3 vec_b);
 
 #endif

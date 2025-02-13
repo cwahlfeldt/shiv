@@ -1,25 +1,355 @@
 #include <shiv/shiv.h>
+#include <shiv/renderer/renderer_utils.h>
 
+// Scene rendering resources
 static SDL_GPUGraphicsPipeline* ScenePipeline;
 static SDL_GPUBuffer* SceneVertexBuffer;
 static SDL_GPUBuffer* SceneIndexBuffer;
-static SDL_GPUTexture* SceneColorTexture;
-static SDL_GPUTexture* SceneDepthTexture;
+static RenderTarget* SceneTarget;
 
+// Post-processing resources
 static SDL_GPUGraphicsPipeline* EffectPipeline;
-static SDL_GPUBuffer* EffectVertexBuffer;
-static SDL_GPUBuffer* EffectIndexBuffer;
+static QuadResources* EffectQuad;
 static SDL_GPUSampler* EffectSampler;
 
 static float Time;
-static int SceneWidth, SceneHeight;
 
 static int init(Renderer* renderer)
 {
+    // Basic initialization
     int result = renderer_init(renderer, 0);
     if (result < 0) {
         return result;
     }
+
+    // Create render target at quarter resolution
+    int w, h;
+    SDL_GetWindowSizeInPixels(renderer->window, &w, &h);
+    SceneTarget = create_render_target(renderer->device, w/4, h/4,
+                                     SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
+                                     SDL_GPU_TEXTUREFORMAT_D16_UNORM);
+    if (!SceneTarget) {
+        SDL_Log("Failed to create scene render target!");
+        return -1;
+    }
+
+    // Create the shaders
+    SDL_GPUShader* scene_vertex_shader = load_shader(renderer->device, "PositionColorTransform.vert", 0, 1, 0, 0);
+    SDL_GPUShader* scene_fragment_shader = load_shader(renderer->device, "SolidColorDepth.frag", 0, 1, 0, 0);
+    SDL_GPUShader* effect_vertex_shader = load_shader(renderer->device, "TexturedQuad.vert", 0, 0, 0, 0);
+    SDL_GPUShader* effect_fragment_shader = load_shader(renderer->device, "DepthOutline.frag", 2, 1, 0, 0);
+
+    if (!scene_vertex_shader || !scene_fragment_shader || !effect_vertex_shader || !effect_fragment_shader) {
+        SDL_Log("Failed to load shaders!");
+        return -1;
+    }
+
+    // Create scene pipeline
+    SDL_GPUVertexInputState scene_vertex_input = {
+        .num_vertex_buffers = 1,
+        .vertex_buffer_descriptions = (SDL_GPUVertexBufferDescription[]) {
+            { .slot = 0, .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
+              .instance_step_rate = 0, .pitch = sizeof(PositionColorVertex) }
+        },
+        .num_vertex_attributes = 2,
+        .vertex_attributes = (SDL_GPUVertexAttribute[]) {
+            { .buffer_slot = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
+              .location = 0, .offset = 0 },
+            { .buffer_slot = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM,
+              .location = 1, .offset = sizeof(float) * 3 }
+        }
+    };
+
+    SDL_GPUGraphicsPipelineCreateInfo scene_pipeline_info = 
+        create_default_3d_pipeline_info(SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
+                                      SDL_GPU_TEXTUREFORMAT_D16_UNORM,
+                                      &scene_vertex_input);
+    scene_pipeline_info.vertex_shader = scene_vertex_shader;
+    scene_pipeline_info.fragment_shader = scene_fragment_shader;
+
+    ScenePipeline = SDL_CreateGPUGraphicsPipeline(renderer->device, &scene_pipeline_info);
+    if (!ScenePipeline) {
+        SDL_Log("Failed to create Scene pipeline!");
+        return -1;
+    }
+
+    // Create effect pipeline
+    SDL_GPUVertexInputState effect_vertex_input = {
+        .num_vertex_buffers = 1,
+        .vertex_buffer_descriptions = (SDL_GPUVertexBufferDescription[]) {
+            { .slot = 0, .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
+              .instance_step_rate = 0, .pitch = sizeof(PositionTextureVertex) }
+        },
+        .num_vertex_attributes = 2,
+        .vertex_attributes = (SDL_GPUVertexAttribute[]) {
+            { .buffer_slot = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
+              .location = 0, .offset = 0 },
+            { .buffer_slot = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
+              .location = 1, .offset = sizeof(float) * 3 }
+        }
+    };
+
+    SDL_GPUGraphicsPipelineCreateInfo effect_pipeline_info = 
+        create_default_2d_pipeline_info(SDL_GetGPUSwapchainTextureFormat(renderer->device, renderer->window),
+                                      &effect_vertex_input,
+                                      true);  // Enable alpha blending
+    effect_pipeline_info.vertex_shader = effect_vertex_shader;
+    effect_pipeline_info.fragment_shader = effect_fragment_shader;
+
+    EffectPipeline = SDL_CreateGPUGraphicsPipeline(renderer->device, &effect_pipeline_info);
+    if (!EffectPipeline) {
+        SDL_Log("Failed to create Effect pipeline!");
+        return -1;
+    }
+
+    // Cleanup shaders
+    SDL_ReleaseGPUShader(renderer->device, effect_vertex_shader);
+    SDL_ReleaseGPUShader(renderer->device, effect_fragment_shader);
+    SDL_ReleaseGPUShader(renderer->device, scene_vertex_shader);
+    SDL_ReleaseGPUShader(renderer->device, scene_fragment_shader);
+
+    // Create effect sampler
+    EffectSampler = SDL_CreateGPUSampler(renderer->device, &(SDL_GPUSamplerCreateInfo) {
+        .min_filter = SDL_GPU_FILTER_NEAREST,
+        .mag_filter = SDL_GPU_FILTER_NEAREST,
+        .mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST,
+        .address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_REPEAT,
+        .address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_REPEAT,
+        .address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_REPEAT,
+    });
+
+    // Create fullscreen quad for effect
+    EffectQuad = create_fullscreen_quad(renderer->device);
+    if (!EffectQuad) {
+        SDL_Log("Failed to create effect quad!");
+        return -1;
+    }
+
+    // Create scene buffers
+    SceneVertexBuffer = SDL_CreateGPUBuffer(
+        renderer->device,
+        &(SDL_GPUBufferCreateInfo) {
+            .usage = SDL_GPU_BUFFERUSAGE_VERTEX,
+            .size = sizeof(PositionColorVertex) * 24  // Cube vertices
+        });
+
+    SceneIndexBuffer = SDL_CreateGPUBuffer(
+        renderer->device,
+        &(SDL_GPUBufferCreateInfo) {
+            .usage = SDL_GPU_BUFFERUSAGE_INDEX,
+            .size = sizeof(Uint16) * 36  // Cube indices
+        });
+
+    // Upload scene geometry
+    SDL_GPUTransferBuffer* buffer_transfer = SDL_CreateGPUTransferBuffer(
+        renderer->device,
+        &(SDL_GPUTransferBufferCreateInfo) {
+            .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+            .size = (sizeof(PositionColorVertex) * 24) + (sizeof(Uint16) * 36)
+        });
+
+    PositionColorVertex* transfer_data = SDL_MapGPUTransferBuffer(renderer->device, buffer_transfer, false);
+
+    // Define cube vertices with colors
+    PositionColorVertex cube_vertices[] = {
+        {{-10.0f, -10.0f, -10.0f}, 255, 0, 0, 255},    // Front face (red)
+        {{10.0f, -10.0f, -10.0f}, 255, 0, 0, 255},
+        {{10.0f, 10.0f, -10.0f}, 255, 0, 0, 255},
+        {{-10.0f, 10.0f, -10.0f}, 255, 0, 0, 255},
+        
+        {{-10.0f, -10.0f, 10.0f}, 255, 255, 0, 255},   // Back face (yellow)
+        {{10.0f, -10.0f, 10.0f}, 255, 255, 0, 255},
+        {{10.0f, 10.0f, 10.0f}, 255, 255, 0, 255},
+        {{-10.0f, 10.0f, 10.0f}, 255, 255, 0, 255},
+        
+        {{-10.0f, -10.0f, -10.0f}, 255, 0, 255, 255},  // Left face (magenta)
+        {{-10.0f, 10.0f, -10.0f}, 255, 0, 255, 255},
+        {{-10.0f, 10.0f, 10.0f}, 255, 0, 255, 255},
+        {{-10.0f, -10.0f, 10.0f}, 255, 0, 255, 255},
+        
+        {{10.0f, -10.0f, -10.0f}, 0, 255, 0, 255},     // Right face (green)
+        {{10.0f, 10.0f, -10.0f}, 0, 255, 0, 255},
+        {{10.0f, 10.0f, 10.0f}, 0, 255, 0, 255},
+        {{10.0f, -10.0f, 10.0f}, 0, 255, 0, 255},
+        
+        {{-10.0f, -10.0f, -10.0f}, 0, 255, 255, 255},  // Bottom face (cyan)
+        {{-10.0f, -10.0f, 10.0f}, 0, 255, 255, 255},
+        {{10.0f, -10.0f, 10.0f}, 0, 255, 255, 255},
+        {{10.0f, -10.0f, -10.0f}, 0, 255, 255, 255},
+        
+        {{-10.0f, 10.0f, -10.0f}, 0, 0, 255, 255},     // Top face (blue)
+        {{-10.0f, 10.0f, 10.0f}, 0, 0, 255, 255},
+        {{10.0f, 10.0f, 10.0f}, 0, 0, 255, 255},
+        {{10.0f, 10.0f, -10.0f}, 0, 0, 255, 255}
+    };
+    memcpy(transfer_data, cube_vertices, sizeof(cube_vertices));
+
+    // Define cube indices
+    Uint16* index_data = (Uint16*)&transfer_data[24];
+    Uint16 indices[] = {
+        0, 1, 2, 0, 2, 3,       // Front
+        4, 5, 6, 4, 6, 7,       // Back
+        8, 9, 10, 8, 10, 11,    // Left
+        12, 13, 14, 12, 14, 15, // Right
+        16, 17, 18, 16, 18, 19, // Bottom
+        20, 21, 22, 20, 22, 23  // Top
+    };
+    SDL_memcpy(index_data, indices, sizeof(indices));
+
+    SDL_UnmapGPUTransferBuffer(renderer->device, buffer_transfer);
+
+    // Upload vertex and index data
+    SDL_GPUCommandBuffer* cmd_buf = SDL_AcquireGPUCommandBuffer(renderer->device);
+    SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(cmd_buf);
+
+    SDL_UploadToGPUBuffer(
+        copy_pass,
+        &(SDL_GPUTransferBufferLocation) {
+            .transfer_buffer = buffer_transfer,
+            .offset = 0 
+        },
+        &(SDL_GPUBufferRegion) {
+            .buffer = SceneVertexBuffer,
+            .offset = 0,
+            .size = sizeof(PositionColorVertex) * 24 
+        },
+        false);
+
+    SDL_UploadToGPUBuffer(
+        copy_pass,
+        &(SDL_GPUTransferBufferLocation) {
+            .transfer_buffer = buffer_transfer,
+            .offset = sizeof(PositionColorVertex) * 24 
+        },
+        &(SDL_GPUBufferRegion) {
+            .buffer = SceneIndexBuffer,
+            .offset = 0,
+            .size = sizeof(Uint16) * 36 
+        },
+        false);
+
+    SDL_EndGPUCopyPass(copy_pass);
+    SDL_SubmitGPUCommandBuffer(cmd_buf);
+    SDL_ReleaseGPUTransferBuffer(renderer->device, buffer_transfer);
+
+    Time = 0;
+    return 0;
+}
+
+static int update(Renderer* renderer)
+{
+    Time += renderer->delta_time;
+    return 0;
+}
+
+static int draw(Renderer* renderer)
+{
+    SDL_GPUCommandBuffer* cmdbuf = SDL_AcquireGPUCommandBuffer(renderer->device);
+    if (!cmdbuf) {
+        SDL_Log("AcquireGPUCommandBuffer failed: %s", SDL_GetError());
+        return -1;
+    }
+
+    SDL_GPUTexture* swapchain_texture;
+    if (!SDL_WaitAndAcquireGPUSwapchainTexture(cmdbuf, renderer->window, &swapchain_texture, NULL, NULL)) {
+        SDL_Log("WaitAndAcquireGPUSwapchainTexture failed: %s", SDL_GetError());
+        return -1;
+    }
+
+    if (swapchain_texture) {
+        // Render the 3D Scene (Color and Depth pass)
+        float near_plane = 20.0f;
+        float far_plane = 60.0f;
+
+        // Camera setup
+        vec3 eye = { SDL_cosf(Time) * 30, 30, SDL_sinf(Time) * 30 };
+        vec3 center = { 0, 0, 0 };
+        vec3 up = { 0, 1, 0 };
+
+        // Create view-projection matrix
+        mat4 proj = GLM_MAT4_IDENTITY_INIT;
+        mat4 view = GLM_MAT4_IDENTITY_INIT;
+        mat4 viewproj = GLM_MAT4_IDENTITY_INIT;
+        
+        glm_perspective(75.0f * SDL_PI_F / 180.0f,
+                       SceneTarget->width / (float)SceneTarget->height,
+                       near_plane,
+                       far_plane,
+                       proj);
+        glm_lookat(eye, center, up, view);
+        glm_mat4_mul(proj, view, viewproj);
+
+        // Scene pass
+        SDL_GPUColorTargetInfo color_target = create_color_target_info(
+            SceneTarget->color,
+            (SDL_FColor) { 0.0f, 0.0f, 0.0f, 0.0f },
+            SDL_GPU_LOADOP_CLEAR,
+            SDL_GPU_STOREOP_STORE);
+
+        SDL_GPUDepthStencilTargetInfo depth_target = create_depth_target_info(
+            SceneTarget->depth,
+            1.0f,
+            0,
+            SDL_GPU_LOADOP_CLEAR,
+            SDL_GPU_STOREOP_STORE);
+        depth_target.cycle = true;
+
+        // Push uniforms and draw scene
+        SDL_PushGPUVertexUniformData(cmdbuf, 0, viewproj, sizeof(viewproj));
+        SDL_PushGPUFragmentUniformData(cmdbuf, 0, (float[]) { near_plane, far_plane }, 8);
+
+        SDL_GPURenderPass* render_pass = SDL_BeginGPURenderPass(cmdbuf, &color_target, 1, &depth_target);
+        SDL_BindGPUVertexBuffers(render_pass, 0, &(SDL_GPUBufferBinding) { .buffer = SceneVertexBuffer, .offset = 0 }, 1);
+        SDL_BindGPUIndexBuffer(render_pass, &(SDL_GPUBufferBinding) { .buffer = SceneIndexBuffer, .offset = 0 }, SDL_GPU_INDEXELEMENTSIZE_16BIT);
+        SDL_BindGPUGraphicsPipeline(render_pass, ScenePipeline);
+        SDL_DrawGPUIndexedPrimitives(render_pass, 36, 1, 0, 0, 0);
+        SDL_EndGPURenderPass(render_pass);
+
+        // Post-process pass
+        SDL_GPUColorTargetInfo swapchain_target = create_color_target_info(
+            swapchain_texture,
+            (SDL_FColor) { 0.2f, 0.5f, 0.4f, 1.0f },
+            SDL_GPU_LOADOP_CLEAR,
+            SDL_GPU_STOREOP_STORE);
+
+        render_pass = SDL_BeginGPURenderPass(cmdbuf, &swapchain_target, 1, NULL);
+        SDL_BindGPUGraphicsPipeline(render_pass, EffectPipeline);
+        SDL_BindGPUVertexBuffers(render_pass, 0, &(SDL_GPUBufferBinding) { .buffer = EffectQuad->vertex_buffer, .offset = 0 }, 1);
+        SDL_BindGPUIndexBuffer(render_pass, &(SDL_GPUBufferBinding) { .buffer = EffectQuad->index_buffer, .offset = 0 }, SDL_GPU_INDEXELEMENTSIZE_16BIT);
+        SDL_BindGPUFragmentSamplers(render_pass, 0, (SDL_GPUTextureSamplerBinding[]) {
+            { .texture = SceneTarget->color, .sampler = EffectSampler },
+            { .texture = SceneTarget->depth, .sampler = EffectSampler }
+        }, 2);
+        SDL_DrawGPUIndexedPrimitives(render_pass, 6, 1, 0, 0, 0);
+        SDL_EndGPURenderPass(render_pass);
+    }
+
+    SDL_SubmitGPUCommandBuffer(cmdbuf);
+    return 0;
+}
+
+static void quit(Renderer* renderer)
+{
+    // Release scene resources
+    SDL_ReleaseGPUGraphicsPipeline(renderer->device, ScenePipeline);
+    SDL_ReleaseGPUBuffer(renderer->device, SceneVertexBuffer);
+    SDL_ReleaseGPUBuffer(renderer->device, SceneIndexBuffer);
+    destroy_render_target(renderer->device, SceneTarget);
+
+    // Release post-processing resources
+    SDL_ReleaseGPUGraphicsPipeline(renderer->device, EffectPipeline);
+    destroy_fullscreen_quad(renderer->device, EffectQuad);
+    SDL_ReleaseGPUSampler(renderer->device, EffectSampler);
+
+    renderer_quit(renderer);
+}
+
+System depth_sampler = { "depth_sampler", init, update, draw, quit };
+
+    // Initialize our transformation matrices using cglm
+    mat4 projection = GLM_MAT4_IDENTITY_INIT;
+    mat4 view = GLM_MAT4_IDENTITY_INIT;
+    mat4 model = GLM_MAT4_IDENTITY_INIT;
 
     // Creates the Shaders & Pipelines
     {
@@ -149,35 +479,39 @@ static int init(Renderer* renderer)
             bufferTransferBuffer,
             false);
 
-        transferData[0] = (PositionColorVertex) { -10, -10, -10, 255, 0, 0, 255 };
-        transferData[1] = (PositionColorVertex) { 10, -10, -10, 255, 0, 0, 255 };
-        transferData[2] = (PositionColorVertex) { 10, 10, -10, 255, 0, 0, 255 };
-        transferData[3] = (PositionColorVertex) { -10, 10, -10, 255, 0, 0, 255 };
-
-        transferData[4] = (PositionColorVertex) { -10, -10, 10, 255, 255, 0, 255 };
-        transferData[5] = (PositionColorVertex) { 10, -10, 10, 255, 255, 0, 255 };
-        transferData[6] = (PositionColorVertex) { 10, 10, 10, 255, 255, 0, 255 };
-        transferData[7] = (PositionColorVertex) { -10, 10, 10, 255, 255, 0, 255 };
-
-        transferData[8] = (PositionColorVertex) { -10, -10, -10, 255, 0, 255, 255 };
-        transferData[9] = (PositionColorVertex) { -10, 10, -10, 255, 0, 255, 255 };
-        transferData[10] = (PositionColorVertex) { -10, 10, 10, 255, 0, 255, 255 };
-        transferData[11] = (PositionColorVertex) { -10, -10, 10, 255, 0, 255, 255 };
-
-        transferData[12] = (PositionColorVertex) { 10, -10, -10, 0, 255, 0, 255 };
-        transferData[13] = (PositionColorVertex) { 10, 10, -10, 0, 255, 0, 255 };
-        transferData[14] = (PositionColorVertex) { 10, 10, 10, 0, 255, 0, 255 };
-        transferData[15] = (PositionColorVertex) { 10, -10, 10, 0, 255, 0, 255 };
-
-        transferData[16] = (PositionColorVertex) { -10, -10, -10, 0, 255, 255, 255 };
-        transferData[17] = (PositionColorVertex) { -10, -10, 10, 0, 255, 255, 255 };
-        transferData[18] = (PositionColorVertex) { 10, -10, 10, 0, 255, 255, 255 };
-        transferData[19] = (PositionColorVertex) { 10, -10, -10, 0, 255, 255, 255 };
-
-        transferData[20] = (PositionColorVertex) { -10, 10, -10, 0, 0, 255, 255 };
-        transferData[21] = (PositionColorVertex) { -10, 10, 10, 0, 0, 255, 255 };
-        transferData[22] = (PositionColorVertex) { 10, 10, 10, 0, 0, 255, 255 };
-        transferData[23] = (PositionColorVertex) { 10, 10, -10, 0, 0, 255, 255 };
+        // Define vertices with float arrays for positions
+        PositionColorVertex cube_vertices[] = {
+            {{-10.0f, -10.0f, -10.0f}, 255, 0, 0, 255},   // Front face (red)
+            {{10.0f, -10.0f, -10.0f}, 255, 0, 0, 255},
+            {{10.0f, 10.0f, -10.0f}, 255, 0, 0, 255},
+            {{-10.0f, 10.0f, -10.0f}, 255, 0, 0, 255},
+            
+            {{-10.0f, -10.0f, 10.0f}, 255, 255, 0, 255},  // Back face (yellow)
+            {{10.0f, -10.0f, 10.0f}, 255, 255, 0, 255},
+            {{10.0f, 10.0f, 10.0f}, 255, 255, 0, 255},
+            {{-10.0f, 10.0f, 10.0f}, 255, 255, 0, 255},
+            
+            {{-10.0f, -10.0f, -10.0f}, 255, 0, 255, 255}, // Left face (magenta)
+            {{-10.0f, 10.0f, -10.0f}, 255, 0, 255, 255},
+            {{-10.0f, 10.0f, 10.0f}, 255, 0, 255, 255},
+            {{-10.0f, -10.0f, 10.0f}, 255, 0, 255, 255},
+            
+            {{10.0f, -10.0f, -10.0f}, 0, 255, 0, 255},    // Right face (green)
+            {{10.0f, 10.0f, -10.0f}, 0, 255, 0, 255},
+            {{10.0f, 10.0f, 10.0f}, 0, 255, 0, 255},
+            {{10.0f, -10.0f, 10.0f}, 0, 255, 0, 255},
+            
+            {{-10.0f, -10.0f, -10.0f}, 0, 255, 255, 255}, // Bottom face (cyan)
+            {{-10.0f, -10.0f, 10.0f}, 0, 255, 255, 255},
+            {{10.0f, -10.0f, 10.0f}, 0, 255, 255, 255},
+            {{10.0f, -10.0f, -10.0f}, 0, 255, 255, 255},
+            
+            {{-10.0f, 10.0f, -10.0f}, 0, 0, 255, 255},    // Top face (blue)
+            {{-10.0f, 10.0f, 10.0f}, 0, 0, 255, 255},
+            {{10.0f, 10.0f, 10.0f}, 0, 0, 255, 255},
+            {{10.0f, 10.0f, -10.0f}, 0, 0, 255, 255}
+        };
+        memcpy(transferData, cube_vertices, sizeof(cube_vertices));
 
         Uint16* indexData = (Uint16*)&transferData[24];
         Uint16 indices[] = {
@@ -248,10 +582,13 @@ static int init(Renderer* renderer)
             bufferTransferBuffer,
             false);
 
-        transferData[0] = (PositionTextureVertex) { -1, 1, 0, 0, 0 };
-        transferData[1] = (PositionTextureVertex) { 1, 1, 0, 1, 0 };
-        transferData[2] = (PositionTextureVertex) { 1, -1, 0, 1, 1 };
-        transferData[3] = (PositionTextureVertex) { -1, -1, 0, 0, 1 };
+        PositionTextureVertex quad_vertices[] = {
+            {{-1.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},   // Top-left
+            {{1.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},    // Top-right
+            {{1.0f, -1.0f, 0.0f}, {1.0f, 1.0f}},   // Bottom-right
+            {{-1.0f, -1.0f, 0.0f}, {0.0f, 1.0f}}   // Bottom-left
+        };
+        memcpy(transferData, quad_vertices, sizeof(quad_vertices));
 
         Uint16* indexData = (Uint16*)&transferData[4];
         indexData[0] = 0;
@@ -322,17 +659,24 @@ static int draw(Renderer* renderer)
         float nearPlane = 20.0f;
         float farPlane = 60.0f;
 
-        Matrix4x4 proj = Matrix4x4_create_perspective_field_of_view(
-            75.0f * SDL_PI_F / 180.0f,
-            SceneWidth / (float)SceneHeight,
-            nearPlane,
-            farPlane);
-        Matrix4x4 view = Matrix4x4_create_look_at(
-            (Vector3) { SDL_cosf(Time) * 30, 30, SDL_sinf(Time) * 30 },
-            (Vector3) { 0, 0, 0 },
-            (Vector3) { 0, 1, 0 });
+        // Camera setup
+        vec3 eye = { SDL_cosf(Time) * 30, 30, SDL_sinf(Time) * 30 };
+        vec3 center = { 0, 0, 0 };
+        vec3 up = { 0, 1, 0 };
 
-        Matrix4x4 viewproj = Matrix4x4_multiply(view, proj);
+        // Create projection and view matrices
+        mat4 proj = GLM_MAT4_IDENTITY_INIT;
+        mat4 view = GLM_MAT4_IDENTITY_INIT;
+        mat4 viewproj = GLM_MAT4_IDENTITY_INIT;
+        glm_perspective(75.0f * SDL_PI_F / 180.0f,
+                       SceneWidth / (float)SceneHeight,
+                       nearPlane,
+                       farPlane,
+                       proj);
+        glm_lookat(eye, center, up, view);
+        
+        // Combine view and projection matrices (in correct order)
+        glm_mat4_mul(proj, view, viewproj);
 
         SDL_GPUColorTargetInfo colorTargetInfo = { 0 };
         colorTargetInfo.texture = SceneColorTexture;
@@ -350,7 +694,7 @@ static int draw(Renderer* renderer)
         depthStencilTargetInfo.stencil_load_op = SDL_GPU_LOADOP_CLEAR;
         depthStencilTargetInfo.stencil_store_op = SDL_GPU_STOREOP_STORE;
 
-        SDL_PushGPUVertexUniformData(cmdbuf, 0, &viewproj, sizeof(viewproj));
+        SDL_PushGPUVertexUniformData(cmdbuf, 0, viewproj, sizeof(viewproj));
         SDL_PushGPUFragmentUniformData(cmdbuf, 0, (float[]) { nearPlane, farPlane }, 8);
 
         SDL_GPURenderPass* renderPass = SDL_BeginGPURenderPass(cmdbuf, &colorTargetInfo, 1, &depthStencilTargetInfo);

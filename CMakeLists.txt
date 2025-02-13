@@ -16,6 +16,9 @@ find_library(CGLM_LIB
     PATHS ${CMAKE_CURRENT_SOURCE_DIR}/lib/cglm/build
 )
 
+# Set library directory
+set(LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib)
+
 # Include directories
 include_directories(
     ${LIB_DIR}/SDL/include
@@ -27,6 +30,7 @@ include_directories(
 add_executable(shiv
     src/main.c
     src/renderer/renderer.c
+    src/renderer/renderer_utils.c
     src/systems/depth_sampler.c
 )
 

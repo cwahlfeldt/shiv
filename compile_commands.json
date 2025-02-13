@@ -2,52 +2,18 @@
   {
     "arguments": [
       "/usr/bin/cc",
-      "-I/SDL/include",
-      "-I/cglm/include",
-      "-I/stb",
-      "-I/home/waffles/Code/shiv/include",
-      "-I/home/waffles/Code/shiv/lib/flecs/include",
-      "-c",
-      "-o",
-      "CMakeFiles/shiv.dir/src/main.c.o",
-      "/home/waffles/Code/shiv/src/main.c"
-    ],
-    "directory": "/home/waffles/Code/shiv/build",
-    "file": "/home/waffles/Code/shiv/src/main.c",
-    "output": "/home/waffles/Code/shiv/build/CMakeFiles/shiv.dir/src/main.c.o"
-  },
-  {
-    "arguments": [
-      "/usr/bin/cc",
-      "-I/SDL/include",
-      "-I/cglm/include",
-      "-I/stb",
-      "-I/home/waffles/Code/shiv/include",
-      "-I/home/waffles/Code/shiv/lib/flecs/include",
-      "-c",
-      "-o",
-      "CMakeFiles/shiv.dir/src/renderer/renderer.c.o",
-      "/home/waffles/Code/shiv/src/renderer/renderer.c"
-    ],
-    "directory": "/home/waffles/Code/shiv/build",
-    "file": "/home/waffles/Code/shiv/src/renderer/renderer.c",
-    "output": "/home/waffles/Code/shiv/build/CMakeFiles/shiv.dir/src/renderer/renderer.c.o"
-  },
-  {
-    "arguments": [
-      "/usr/bin/cc",
-      "-I/SDL/include",
-      "-I/cglm/include",
-      "-I/stb",
-      "-I/home/waffles/Code/shiv/include",
-      "-I/home/waffles/Code/shiv/lib/flecs/include",
+      "-I/home/waffles/code/shiv/lib/SDL/include",
+      "-I/home/waffles/code/shiv/lib/cglm/include",
+      "-I/home/waffles/code/shiv/lib/stb",
+      "-I/home/waffles/code/shiv/include",
+      "-I/home/waffles/code/shiv/lib/flecs/include",
       "-c",
       "-o",
       "CMakeFiles/shiv.dir/src/systems/depth_sampler.c.o",
-      "/home/waffles/Code/shiv/src/systems/depth_sampler.c"
+      "/home/waffles/code/shiv/src/systems/depth_sampler.c"
     ],
-    "directory": "/home/waffles/Code/shiv/build",
-    "file": "/home/waffles/Code/shiv/src/systems/depth_sampler.c",
-    "output": "/home/waffles/Code/shiv/build/CMakeFiles/shiv.dir/src/systems/depth_sampler.c.o"
+    "directory": "/home/waffles/code/shiv/build",
+    "file": "/home/waffles/code/shiv/src/systems/depth_sampler.c",
+    "output": "/home/waffles/code/shiv/build/CMakeFiles/shiv.dir/src/systems/depth_sampler.c.o"
   }
 ]
