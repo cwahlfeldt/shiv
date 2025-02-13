@@ -14,6 +14,7 @@ typedef struct Renderer {
 int renderer_init(
     Renderer* renderer,
     SDL_WindowFlags window_flags);
+
 void renderer_quit(Renderer* renderer);
 
 void initialize_asset_loader();
