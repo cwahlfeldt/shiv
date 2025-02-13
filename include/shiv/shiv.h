@@ -4,5 +4,6 @@
 #include <shiv/engine/core.h>
 #include <shiv/engine/systems.h>
 #include <shiv/renderer/renderer.h>
+#include <shiv/renderer/renderer_utils.h>
 
 #endif

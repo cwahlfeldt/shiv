@@ -21,9 +21,10 @@ typedef struct RenderTarget {
 QuadResources* create_fullscreen_quad(SDL_GPUDevice* device);
 void destroy_fullscreen_quad(SDL_GPUDevice* device, QuadResources* quad);
 
-RenderTarget* create_render_target(SDL_GPUDevice* device, int width, int height, 
+RenderTarget* create_render_target(SDL_GPUDevice* device, int width, int height,
                                  SDL_GPUTextureFormat color_format,
                                  SDL_GPUTextureFormat depth_format);
+
 void destroy_render_target(SDL_GPUDevice* device, RenderTarget* target);
 
 // Common render state helpers
